@@ -163,7 +163,7 @@
                  (doall (map (fn [b v] (config! b :text ({:x "X" :o "O" :e " "} v))) (flatten boxes) (flatten board))))
         player (fn [board]
                  (let [result (promise)]
-                   (set-destination #(future (deliver result %)))
+                   (set-destination #(deliver result %))
                    @result))]
     (native!)
     (invoke-later 
