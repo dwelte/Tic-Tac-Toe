@@ -65,7 +65,7 @@
      (cond
        (#{:success :start} outcome) (recur next-player current-player viewers next-board)
        (= outcome :invalid) (recur current-player next-player viewers next-board)
-       :else outcome))))
+       :else (do (Thread/sleep 2000) outcome)))))
 
 (defn print-board [board]
   (let [str-row (fn [row] (apply str (interpose \| (map {:x \x, :o \o, :e \space} row))))
@@ -140,6 +140,22 @@
 
 (defn router [x] (dosync (when-let [f (deref router-destination)] (ref-set router-destination nil) (f x))))
 
+(defn select-mode []
+  (let [return-promise (promise)
+        select-frame (frame :title "Tic-Tac-Toe")
+        make-return-function (fn [value] (fn [e] (dispose! select-frame) (deliver return-promise value)))
+        make-button (fn [message value] (let [b (button :text message)] (listen b :action (make-return-function value)) b))
+        perfect-button (make-button "Perfect AI" :perfect)
+        random-button (make-button "Random AI" :random)
+        two-player-button (make-button "Two Player" :two)
+        exit-button (make-button "Exit" :exit)
+        grid (grid-panel :rows 1 :columns 4 :items [perfect-button random-button two-player-button exit-button])]
+    (-> select-frame
+      (config! :content grid)
+      pack!
+      show!)
+    @return-promise))
+
 (defn make-graphic-player-and-viewer []
   (let [make-box (fn [] (button :text " " :font "ARIAL-BOLD-42"))
         make-row (fn [] [(make-box) (make-box) (make-box)])
@@ -166,12 +182,11 @@
                    (set-destination #(deliver result %))
                    @result))]
     (native!)
-    (invoke-later 
-      (-> (frame :title "Hello" 
-                 :content outer
-                 :on-close :exit)
-        pack!
-        show!))
+    (-> (frame :title "Hello" 
+               :content outer
+               :on-close :dispose)
+      pack!
+      show!)
     [player viewer]))
 
 (defn make-two-player-cl-viewer [] print-board-and-outcome)
@@ -200,32 +215,19 @@
                     :else          (make-graphical-player-vs-player)))
     (do (println "Illegal choice.  Please choose a or b.") (println) (recur))))
 
-(defn temp-main [& args]
-  (native!)
-  (invoke-later 
-    (let [make-box (fn [] (button :text "x" :font "ARIAL-BOLD-42"))
-          make-row (fn [] [(make-box) (make-box) (make-box)])
-          boxes [(make-row) (make-row) (make-row)]
-          j (doall (for [a (range 3) b (range 3) :let [pos [a b]]] (listen (get-in boxes pos) :action (fn [e] (router pos))))) 
-          box (get-in boxes [1 1])
-          grid (grid-panel :rows 3
-                           :columns 3
-                           :hgap 0
-                           :vgap 0
-                           :items (flatten boxes))]
-    (-> (frame :title "Hello" 
-               :content grid
-               :on-close :exit)
-      pack!
-      show!)))
-  (set-destination #(println "Kabaaam!" %)))
+(defn choose-players-graphical [mode]
+  (case mode
+    :perfect (make-graphical-player-vs-perfect)
+    :random (make-graphical-player-vs-rand)
+    :two (make-graphical-player-vs-player)
+    nil))
 
 (defn -main [& args]
-  (println "Let's play tic-tac-toe!")
-  (println)
-  (let [[xplayer oplayer viewers] (choose-players)]
-    (play-a-game xplayer oplayer viewers))
-  (println))
-
+  (let [mode (select-mode)]
+    (if (not= mode :exit)
+      (let [[xplayer oplayer viewers] (choose-players-graphical mode)]
+        (play-a-game xplayer oplayer viewers)
+        (recur args))
+      (System/exit 0))))
 
 
